@@ -43,6 +43,12 @@ bun run server.ts
 Bun test project containing phase-scoped client scenarios and the shared
 TS-vs-Rust diff harness.
 
+`phase0_cross_subdomain_client_compat` checks `Set-Cookie` domain serialization
+on sign-up, sign-in, and sign-out. Both servers run on localhost, and the test
+cookie jar forwards cookies without enforcing domains. This proves header
+compatibility, but does not test browser cookie acceptance or delivery between
+subdomains.
+
 Direct phase runs:
 
 ```bash

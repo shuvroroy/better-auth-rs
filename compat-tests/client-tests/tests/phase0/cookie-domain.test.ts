@@ -5,7 +5,7 @@ import { RUST_BASE_URL, TS_BASE_URL, requireHealthy } from "../../support/config
 import { resetServerState } from "../../support/controls";
 import { createTracingFetch } from "../../support/trace";
 
-test.serial("session cookie domains match across signup, signin, and signout", async () => {
+test.serial("Set-Cookie Domain serialization matches across signup, signin, and signout", async () => {
   const expectedDomain = process.env.COMPAT_COOKIE_DOMAIN || undefined;
   const observations = [];
 
@@ -17,6 +17,9 @@ test.serial("session cookie domains match across signup, signin, and signout", a
     const client = createAuthClient({
       baseURL,
       fetchOptions: {
+        // This jar forwards cookies regardless of domain so localhost servers
+        // can exercise header serialization with .example.com. This scenario
+        // does not verify browser acceptance or cross-subdomain delivery.
         customFetchImpl: createTracingFetch(baseURL, label, []),
         onResponse({ response }) {
           responses.push(response);

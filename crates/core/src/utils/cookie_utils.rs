@@ -122,8 +122,9 @@ fn serialize_cookie(cookie: Cookie<'_>, config: &AuthConfig) -> String {
             Some(cross_sub_domain.domain.clone())
         };
         if let Some(domain) = domain {
-            // TS preserves a leading dot in Domain. Cookie::domain() strips it
-            // during serialization, so append the attribute verbatim instead.
+            // TS/better-call serializes the configured domain without validation.
+            // Preserve that behavior, including leading dots; Cookie::domain()
+            // strips a leading dot during serialization.
             header.push_str("; Domain=");
             header.push_str(&domain);
         }
