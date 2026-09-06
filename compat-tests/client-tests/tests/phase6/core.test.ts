@@ -64,6 +64,89 @@ compatScenario("organization core lifecycle matches TS", async (ctx) => {
   };
 });
 
+for (const { label, metadata } of [
+  { label: "omitted", metadata: undefined },
+  { label: "empty", metadata: {} },
+  {
+    label: "populated",
+    metadata: { nested: { enabled: true, limit: 0 }, tier: "gold" },
+  },
+]) {
+  compatScenario(`organization ${label} metadata matches TS during create and update`, async (ctx) => {
+    const owner = await signUpUser(ctx, "owner", `phase6-metadata-${label}`, "Owner");
+    const created = await owner.orgClient.organization.create({
+      name: "Metadata Org",
+      slug: ctx.uniqueToken(`phase6-metadata-${label}`),
+      ...(metadata === undefined ? {} : { metadata }),
+    });
+    const organizationId = created.data?.id ?? "";
+
+    // TS omits absent metadata in create/update responses, but preserves {}.
+    const updatedWithoutMetadata = await owner.orgClient.organization.update({
+      organizationId,
+      data: { name: "Metadata Org Renamed" },
+    });
+    // Read endpoints expose the stored JSON string (or null), even though
+    // create/update return the parsed object.
+    const fullOrganization = await owner.orgClient.organization.getFullOrganization({
+      query: { organizationId },
+    });
+    const activeOrganization = await owner.orgClient.organization.setActive({
+      organizationId,
+    });
+    const listedOrganizations = await owner.orgClient.organization.list();
+    const deletedOrganization = await owner.orgClient.organization.delete({
+      organizationId,
+    });
+
+    return {
+      created: ctx.snapshot(created),
+      updatedWithoutMetadata: ctx.snapshot(updatedWithoutMetadata),
+      fullOrganization: ctx.snapshot(fullOrganization),
+      activeOrganization: ctx.snapshot(activeOrganization),
+      listedOrganizations: ctx.snapshot(listedOrganizations),
+      deletedOrganization: ctx.snapshot(deletedOrganization),
+    };
+  });
+}
+
+compatScenario("organization metadata updates replace objects and preserve empty objects", async (ctx) => {
+  const owner = await signUpUser(ctx, "owner", "phase6-metadata-update", "Owner");
+  const created = await owner.orgClient.organization.create({
+    name: "Metadata Update Org",
+    slug: ctx.uniqueToken("phase6-metadata-update"),
+    metadata: { original: true, tier: "gold" },
+  });
+  const organizationId = created.data?.id ?? "";
+  const replacedMetadata = await owner.orgClient.organization.update({
+    organizationId,
+    data: { metadata: { nested: { enabled: false }, tier: "silver" } },
+  });
+  const fullAfterReplacement = await owner.orgClient.organization.getFullOrganization({
+    query: { organizationId },
+  });
+  const emptiedMetadata = await owner.orgClient.organization.update({
+    organizationId,
+    data: { metadata: {} },
+  });
+  const updatedWithoutMetadata = await owner.orgClient.organization.update({
+    organizationId,
+    data: { name: "Metadata Update Org Renamed" },
+  });
+  const fullAfterEmptying = await owner.orgClient.organization.getFullOrganization({
+    query: { organizationId },
+  });
+
+  return {
+    created: ctx.snapshot(created),
+    replacedMetadata: ctx.snapshot(replacedMetadata),
+    fullAfterReplacement: ctx.snapshot(fullAfterReplacement),
+    emptiedMetadata: ctx.snapshot(emptiedMetadata),
+    updatedWithoutMetadata: ctx.snapshot(updatedWithoutMetadata),
+    fullAfterEmptying: ctx.snapshot(fullAfterEmptying),
+  };
+});
+
 compatScenario("organization delete returns the deleted org and clears active state", async (ctx) => {
   const owner = await signUpUser(ctx, "owner", "phase6-delete-owner", "Delete Owner");
   const slug = ctx.uniqueToken("phase6-delete-org");
