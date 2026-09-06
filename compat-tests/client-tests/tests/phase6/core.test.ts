@@ -147,6 +147,80 @@ compatScenario("organization metadata updates replace objects and preserve empty
   };
 });
 
+compatScenario("organization metadata preserves key order through its lifecycle", async (ctx) => {
+  const owner = await signUpUser(ctx, "owner", "phase6-metadata-order", "Owner");
+  const created = await owner.orgClient.organization.create({
+    name: "Metadata Order Org",
+    slug: ctx.uniqueToken("phase6-metadata-order"),
+    metadata: {
+      z: 1,
+      a: 2,
+      nested: { y: true, b: false, "10": "ten", "2": "two" },
+      items: [{ z: "last", a: "first" }],
+      "10": "ten",
+      "2": "two",
+    },
+  });
+  const organizationId = created.data?.id ?? "";
+  const fullAfterCreate = await owner.orgClient.organization.getFullOrganization({
+    query: { organizationId },
+  });
+  const listedAfterCreate = await owner.orgClient.organization.list();
+  const activeAfterCreate = await owner.orgClient.organization.setActive({
+    organizationId,
+  });
+
+  const replacedMetadata = await owner.orgClient.organization.update({
+    organizationId,
+    data: {
+      metadata: {
+        y: "replacement",
+        b: "value",
+        nested: { z: 3, a: 4 },
+        items: [{ y: true, b: false, "10": "ten", "2": "two" }],
+        "20": "twenty",
+        "3": "three",
+      },
+    },
+  });
+  const fullAfterReplacement = await owner.orgClient.organization.getFullOrganization({
+    query: { organizationId },
+  });
+  const updatedWithoutMetadata = await owner.orgClient.organization.update({
+    organizationId,
+    data: { name: "Metadata Order Org Renamed" },
+  });
+  const fullAfterOmittedUpdate = await owner.orgClient.organization.getFullOrganization({
+    query: { organizationId },
+  });
+  const listedAfterOmittedUpdate = await owner.orgClient.organization.list();
+  const activeAfterOmittedUpdate = await owner.orgClient.organization.setActive({
+    organizationId,
+  });
+  const deletedOrganization = await owner.orgClient.organization.delete({
+    organizationId,
+  });
+
+  return {
+    created: ctx.snapshot(created),
+    // Snapshot normalization sorts object keys. Serialize parsed metadata here
+    // so create/update key order is checked alongside the stored read strings.
+    createdMetadata: JSON.stringify(created.data?.metadata),
+    fullAfterCreate: ctx.snapshot(fullAfterCreate),
+    listedAfterCreate: ctx.snapshot(listedAfterCreate),
+    activeAfterCreate: ctx.snapshot(activeAfterCreate),
+    replacedMetadata: ctx.snapshot(replacedMetadata),
+    replacementMetadata: JSON.stringify(replacedMetadata.data?.metadata),
+    fullAfterReplacement: ctx.snapshot(fullAfterReplacement),
+    updatedWithoutMetadata: ctx.snapshot(updatedWithoutMetadata),
+    metadataAfterOmittedUpdate: JSON.stringify(updatedWithoutMetadata.data?.metadata),
+    fullAfterOmittedUpdate: ctx.snapshot(fullAfterOmittedUpdate),
+    listedAfterOmittedUpdate: ctx.snapshot(listedAfterOmittedUpdate),
+    activeAfterOmittedUpdate: ctx.snapshot(activeAfterOmittedUpdate),
+    deletedOrganization: ctx.snapshot(deletedOrganization),
+  };
+});
+
 compatScenario("organization delete returns the deleted org and clears active state", async (ctx) => {
   const owner = await signUpUser(ctx, "owner", "phase6-delete-owner", "Delete Owner");
   const slug = ctx.uniqueToken("phase6-delete-org");

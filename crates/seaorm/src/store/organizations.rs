@@ -156,6 +156,77 @@ mod tests {
     use crate::store::migrator::run_migrations;
 
     #[tokio::test]
+    async fn organization_metadata_keeps_key_order_in_storage()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let database = Database::connect("sqlite::memory:").await?;
+        run_migrations(&database).await?;
+        let store = SeaOrmStore::<BundledSchema>::new(AuthConfig::default(), database);
+        let original = r#"{"z":1,"a":2,"nested":{"y":3,"b":4},"items":[{"z":5,"a":6}]}"#;
+        let replacement = r#"{"second":{"z":7,"a":8},"first":[{"y":9,"b":10}]}"#;
+        let organization = store
+            .create_organization(
+                CreateOrganization::new("Ordered metadata", "ordered-metadata")
+                    .with_metadata(serde_json::from_str(original)?),
+            )
+            .await?;
+
+        assert_eq!(
+            organization
+                .metadata
+                .as_ref()
+                .map(ToString::to_string)
+                .as_deref(),
+            Some(original),
+        );
+        let persisted = Entity::find_by_id(organization.id.clone())
+            .one(store.connection())
+            .await?
+            .ok_or("missing organization row")?;
+        assert_eq!(
+            persisted
+                .metadata
+                .as_ref()
+                .map(ToString::to_string)
+                .as_deref(),
+            Some(original),
+        );
+
+        for (metadata, expected) in [
+            (Some(serde_json::from_str(replacement)?), replacement),
+            (None, replacement),
+        ] {
+            let updated = store
+                .update_organization(
+                    &organization.id,
+                    UpdateOrganization {
+                        name: Some("Renamed".to_string()),
+                        metadata,
+                        ..Default::default()
+                    },
+                )
+                .await?;
+            assert_eq!(
+                updated
+                    .metadata
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .as_deref(),
+                Some(expected),
+            );
+            let loaded = store
+                .get_organization_by_id(&organization.id)
+                .await?
+                .ok_or("missing updated organization")?;
+            assert_eq!(
+                loaded.metadata.as_ref().map(ToString::to_string).as_deref(),
+                Some(expected),
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn organization_metadata_round_trips_through_all_store_reads()
     -> Result<(), Box<dyn std::error::Error>> {
         let database = Database::connect("sqlite::memory:").await?;
