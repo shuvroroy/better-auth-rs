@@ -72,7 +72,7 @@ pub fn create_session_like_cookie(
         cookie = cookie.secure(true);
     }
 
-    cookie.build().to_string()
+    serialize_cookie(cookie.build(), config)
 }
 
 /// Build a `Set-Cookie` header value that clears the session cookie.
@@ -104,7 +104,31 @@ pub fn create_clear_cookie(name: &str, config: &AuthConfig) -> String {
         cookie = cookie.secure(true);
     }
 
-    cookie.build().to_string()
+    serialize_cookie(cookie.build(), config)
+}
+
+fn serialize_cookie(cookie: Cookie<'_>, config: &AuthConfig) -> String {
+    let mut header = cookie.to_string();
+    if cookie.name().starts_with("__Host-") {
+        return header;
+    }
+
+    if let Some(cross_sub_domain) = &config.advanced.cross_sub_domain_cookies {
+        let domain = if cross_sub_domain.domain.is_empty() {
+            url::Url::parse(&config.base_url)
+                .ok()
+                .and_then(|url| url.host_str().map(str::to_owned))
+        } else {
+            Some(cross_sub_domain.domain.clone())
+        };
+        if let Some(domain) = domain {
+            // TS preserves a leading dot in Domain. Cookie::domain() strips it
+            // during serialization, so append the attribute verbatim instead.
+            header.push_str("; Domain=");
+            header.push_str(&domain);
+        }
+    }
+    header
 }
 
 /// Build a Better Auth related cookie name using the configured session cookie
@@ -124,5 +148,91 @@ fn map_same_site(s: &crate::config::SameSite) -> CookieSameSite {
         crate::config::SameSite::Strict => CookieSameSite::Strict,
         crate::config::SameSite::Lax => CookieSameSite::Lax,
         crate::config::SameSite::None => CookieSameSite::None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cookie_headers(config: &AuthConfig) -> [String; 6] {
+        [
+            create_session_cookie("token", config),
+            create_session_cookie_with_max_age(Some("token"), None, config),
+            create_cookie("better-auth.oauth_state", "state", 600, config),
+            create_session_like_cookie("better-auth.dont_remember", "true", None, config),
+            create_clear_session_cookie(config),
+            create_clear_cookie("better-auth.session_data", config),
+        ]
+    }
+
+    #[test]
+    fn cookies_share_the_configured_domain_when_set_and_cleared() {
+        for domain in ["example.com", ".example.com"] {
+            let config = AuthConfig::new("test-secret-min-32-chars-1234567")
+                .cross_sub_domain_cookies(domain);
+            let expected = format!("Domain={domain}");
+
+            for header in cookie_headers(&config) {
+                let domains: Vec<_> = header
+                    .split("; ")
+                    .filter(|attribute| attribute.starts_with("Domain="))
+                    .collect();
+                assert_eq!(domains, [expected.as_str()], "{header}");
+            }
+        }
+    }
+
+    #[test]
+    fn cookies_remain_host_only_without_cross_subdomain_config() {
+        let config = AuthConfig::new("test-secret-min-32-chars-1234567")
+            .base_url("https://auth.example.com");
+
+        for header in cookie_headers(&config) {
+            assert!(!header.contains("Domain="), "{header}");
+        }
+    }
+
+    #[test]
+    fn cross_subdomain_cookies_preserve_session_and_deletion_lifetimes() {
+        let config = AuthConfig::new("test-secret-min-32-chars-1234567")
+            .cross_sub_domain_cookies(".example.com");
+        let session = create_session_cookie_with_max_age(Some("token"), None, &config);
+        assert!(session.contains("Domain=.example.com"));
+        assert!(!session.contains("Max-Age="));
+        assert!(!session.contains("Expires="));
+
+        let cleared = create_clear_session_cookie(&config);
+        assert!(cleared.starts_with("better-auth.session_token=;"));
+        assert!(cleared.contains("Domain=.example.com"));
+        assert!(cleared.contains("Max-Age=0"));
+        assert!(!cleared.contains("Expires="));
+    }
+
+    #[test]
+    fn empty_cross_subdomain_domain_falls_back_to_base_url_hostname() {
+        let config = AuthConfig::new("test-secret-min-32-chars-1234567")
+            .base_url("https://auth.example.com:8443")
+            .cross_sub_domain_cookies("");
+
+        for header in cookie_headers(&config) {
+            assert!(header.ends_with("; Domain=auth.example.com"), "{header}");
+        }
+    }
+
+    #[test]
+    fn host_prefixed_cookies_omit_the_cross_subdomain_domain() {
+        let mut config = AuthConfig::new("test-secret-min-32-chars-1234567")
+            .cross_sub_domain_cookies(".example.com");
+        config.session.cookie_name = "__Host-session_token".to_string();
+        config.session.cookie_secure = true;
+
+        for header in [
+            create_session_cookie("token", &config),
+            create_clear_session_cookie(&config),
+        ] {
+            assert!(!header.contains("Domain="), "{header}");
+            assert!(header.contains("; Secure"), "{header}");
+        }
     }
 }
