@@ -37,6 +37,18 @@ jobs:
       - run: cargo clippy --workspace -- -D warnings
       - run: cargo clippy --workspace --features axum -- -D warnings
 
+  wasm-types:
+    name: WASM Types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p better-auth-types
+      - run: cargo check -p better-auth-types --target wasm32-unknown-unknown --all-targets
+
   test:
     name: Test
     runs-on: ubuntu-latest
