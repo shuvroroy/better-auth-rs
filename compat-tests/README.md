@@ -72,6 +72,7 @@ Cargo-native orchestration:
 
 ```bash
 cargo test --test client_compat_tests phase0_client_compat -- --ignored --nocapture
+cargo test --test client_compat_tests phase0_cross_subdomain_client_compat -- --ignored --nocapture
 cargo test --test client_compat_tests phase1_client_compat -- --ignored --nocapture
 cargo test --test client_compat_tests phase2_client_compat -- --ignored --nocapture
 cargo test --test client_compat_tests phase3_client_compat -- --ignored --nocapture
