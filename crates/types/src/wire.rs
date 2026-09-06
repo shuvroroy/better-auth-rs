@@ -8,11 +8,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, Serializer};
 use std::borrow::Cow;
 
+use crate::InvitationStatus;
 use crate::entity::{
     AuthAccount, AuthApiKey, AuthInvitation, AuthOrganization, AuthPasskey, AuthSession, AuthUser,
     AuthVerification,
 };
-use crate::types::InvitationStatus;
 
 /// Public user response shape.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

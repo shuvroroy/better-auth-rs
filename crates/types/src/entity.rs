@@ -13,7 +13,7 @@ use std::borrow::Cow;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-use crate::types::InvitationStatus;
+use crate::InvitationStatus;
 
 /// Trait representing a user entity.
 ///
